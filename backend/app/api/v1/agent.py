@@ -469,9 +469,9 @@ async def execute_agent_request(payload: AgentExecuteRequest) -> AgentExecuteRes
     summary="Reset demo database to seed state",
     description="Explicitly resets demo tasks and projects after confirmation verification.",
 )
-async def reset_demo_database(payload: AgentResetRequest) -> dict[str, Any]:
+async def reset_demo_database(payload: Optional[AgentResetRequest] = None) -> dict[str, Any]:
     """Reset repository data store if explicitly confirmed."""
-    if not payload.confirm:
+    if payload is None or not payload.confirm:
         return {
             "success": False,
             "requires_confirmation": True,
