@@ -38,7 +38,7 @@ COPY backend/ ./backend/
 COPY demo_api/ ./demo_api/
 COPY agent/ ./agent/
 COPY examples/ ./examples/
-COPY storage/ ./storage/
+RUN mkdir -p /app/storage/artifacts
 
 # Copy built frontend assets from builder stage
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist

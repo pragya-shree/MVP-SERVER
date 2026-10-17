@@ -20,7 +20,7 @@ dist/
 
 # Testing & linting
 .pytest_cache/
-.coverage
+.coverages
 htmlcov/
 .mypy_cache/
 .ruff_cache/
@@ -48,3 +48,6 @@ frontend/.env.local
 # Storage artifacts
 storage/artifacts/*
 !storage/artifacts/.gitkeep
+
+
+recovery-codes.txt
