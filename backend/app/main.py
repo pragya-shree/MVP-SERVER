@@ -25,9 +25,14 @@ def create_app() -> FastAPI:
     )
     allowed_origins = [o.strip() for o in allowed_origins_env.split(",") if o.strip()]
 
+    frontend_url = os.environ.get("FRONTEND_URL", "").strip()
+    if frontend_url and frontend_url not in allowed_origins:
+        allowed_origins.append(frontend_url)
+
     application.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
+        allow_origin_regex=r"^https://.*\.vercel\.app$",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

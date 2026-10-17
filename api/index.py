@@ -1,4 +1,4 @@
-﻿"""
+"""
 Vercel serverless entry point for Anything-to-MCP FastAPI backend.
 
 CAPABILITY MATRIX — Vercel serverless runtime:
@@ -47,6 +47,7 @@ Path("/tmp/anything-to-mcp/artifacts").mkdir(parents=True, exist_ok=True)
 # Build ALLOWED_ORIGINS: pick up the Vercel deployment URL automatically
 _vercel_url = os.environ.get("VERCEL_URL", "")
 _custom_domain = os.environ.get("CUSTOM_DOMAIN", "")
+_frontend_url = os.environ.get("FRONTEND_URL", "")
 _configured_origins = os.environ.get("ALLOWED_ORIGINS", "")
 
 _origins = [o.strip() for o in _configured_origins.split(",") if o.strip()]
@@ -54,8 +55,10 @@ if _vercel_url and f"https://{_vercel_url}" not in _origins:
     _origins.append(f"https://{_vercel_url}")
 if _custom_domain and f"https://{_custom_domain}" not in _origins:
     _origins.append(f"https://{_custom_domain}")
+if _frontend_url and _frontend_url not in _origins:
+    _origins.append(_frontend_url)
 # Always allow localhost for development
-for _local in ("http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"):
+for _local in ("http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000", "http://127.0.0.1:3000"):
     if _local not in _origins:
         _origins.append(_local)
 

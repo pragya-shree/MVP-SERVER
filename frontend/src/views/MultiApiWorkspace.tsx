@@ -21,7 +21,7 @@ import {
   Sparkles,
   Database
 } from 'lucide-react';
-import { api } from '../api/client';
+import { api, API_BASE_URL } from '../api/client';
 import type { 
   ToolMetadata, 
   ToolExecuteResponse 
@@ -64,7 +64,7 @@ info:
   version: 2.1.0
   description: E-Commerce Catalog and Warehouse Inventory API
 servers:
-  - url: http://127.0.0.1:8000/demo-target
+  - url: /demo-target
 paths:
   /items:
     get:
@@ -173,7 +173,7 @@ export const MultiApiWorkspace: React.FC = () => {
       const demo = await api.getDemoSpec();
       setNewSpecContent(demo.spec);
       setNewPackageName('task_management_mcp');
-      setNewBaseUrl(demo.default_base_url || 'http://127.0.0.1:8000/demo-target');
+      setNewBaseUrl(demo.default_base_url || `${API_BASE_URL}/demo-target`);
     } catch (err: any) {
       setAddApiError(err.message || 'Failed to load task demo specification.');
     }
@@ -184,7 +184,7 @@ export const MultiApiWorkspace: React.FC = () => {
     setAddApiError(null);
     setNewSpecContent(SAMPLE_STORE_API_SPEC);
     setNewPackageName('store_inventory_mcp');
-    setNewBaseUrl('http://127.0.0.1:8000/demo-target');
+    setNewBaseUrl(`${API_BASE_URL}/demo-target`);
   };
 
   // Handle File Upload for Add API
@@ -968,7 +968,7 @@ export const MultiApiWorkspace: React.FC = () => {
                   type="text"
                   value={newBaseUrl}
                   onChange={(e) => setNewBaseUrl(e.target.value)}
-                  placeholder="e.g. http://127.0.0.1:8000/demo-target"
+                  placeholder={`e.g. ${API_BASE_URL}/demo-target`}
                   className="w-full px-2.5 py-1.5 font-mono rounded bg-canvas border border-line text-ink focus:bg-surface"
                 />
               </div>

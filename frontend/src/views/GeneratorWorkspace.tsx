@@ -17,7 +17,7 @@ import {
   XCircle,
   EyeOff
 } from 'lucide-react';
-import { api } from '../api/client';
+import { api, API_BASE_URL } from '../api/client';
 import type { 
   SpecValidateResponse, 
   ServerGenerateResponse, 
@@ -389,7 +389,7 @@ export const GeneratorWorkspace: React.FC = () => {
                   type="text"
                   value={baseUrl}
                   onChange={(e) => setBaseUrl(e.target.value)}
-                  placeholder="e.g. http://127.0.0.1:8000/demo-target"
+                  placeholder={`e.g. ${API_BASE_URL}/demo-target`}
                   className="w-full px-2.5 py-1.5 text-xs font-mono rounded bg-canvas border border-line text-ink focus:bg-surface"
                 />
               </div>
