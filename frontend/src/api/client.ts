@@ -9,18 +9,19 @@ import type {
   AgentResetResponse,
 } from './types';
 
-// Configure backend API base URL from environment variable:
-// - VITE_API_URL or VITE_API_BASE_URL
-// On Vercel (same-origin): set to "" (empty string)
-// On Vercel (external backend): set to https://your-backend.vercel.app
-// For local dev: defaults to http://127.0.0.1:8000
+// Configure backend API base URL:
+// - In production (same-origin, e.g. Render Docker): no env var needed; returns "" so
+//   all fetch calls use relative paths like /api/v1/specs/validate.
+// - Set VITE_API_URL to override (e.g. separate backend deployment).
+// - For local dev: no env var needed; falls back to http://127.0.0.1:8000.
 export const API_BASE_URL = (() => {
   const configured = import.meta.env.VITE_API_URL ?? import.meta.env.VITE_API_BASE_URL;
-  // Explicitly check for undefined (not set) vs '' (set to empty = same-origin)
-  if (configured === undefined || configured === null) {
-    return 'http://127.0.0.1:8000';
+  // If explicitly set (even to ""), use it (strips trailing slashes)
+  if (configured !== undefined && configured !== null) {
+    return configured.replace(/\/+$/, '');
   }
-  return configured.replace(/\/+$/, '');
+  // Not set: use same-origin in production, localhost in dev
+  return import.meta.env.PROD ? '' : 'http://127.0.0.1:8000';
 })();
 
 class ApiError extends Error {
