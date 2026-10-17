@@ -1,42 +1,41 @@
 {
-  "version": 2,
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "functions": {
     "api/index.py": {
-      "runtime": "python3.12",
-      "maxDuration": 60,
-      "memory": 1024
+      "maxDuration": 60
     }
   },
   "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/dist",
-  "routes": [
+  "rewrites": [
     {
-      "src": "/health",
-      "dest": "/api/index.py"
+      "source": "/health",
+      "destination": "/api/index.py"
     },
     {
-      "src": "/redoc(.*)",
-      "dest": "/api/index.py"
+      "source": "/docs(.*)",
+      "destination": "/api/index.py"
     },
     {
-      "src": "/docs(.*)",
-      "dest": "/api/index.py"
+      "source": "/redoc(.*)",
+      "destination": "/api/index.py"
     },
     {
-      "src": "/demo-target(.*)",
-      "dest": "/api/index.py"
+      "source": "/openapi.json",
+      "destination": "/api/index.py"
     },
     {
-      "src": "/api/(.*)",
-      "dest": "/api/index.py"
+      "source": "/demo-target(.*)",
+      "destination": "/api/index.py"
     },
     {
-      "handle": "filesystem"
+      "source": "/api/(.*)",
+      "destination": "/api/index.py"
     },
     {
-      "src": "/(.*)",
-      "dest": "/index.html"
+      "source": "/((?!api/|health|docs|redoc|openapi\\.json|demo-target).*)",
+      "destination": "/index.html"
     }
   ]
-}
+}
