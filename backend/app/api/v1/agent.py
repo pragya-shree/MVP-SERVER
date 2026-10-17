@@ -195,6 +195,9 @@ async def get_agent_status() -> dict[str, Any]:
     }
 
 
+_CACHED_DEMO_TOOLS: Optional[list[dict[str, Any]]] = None
+
+
 @router.get(
     "/agent/tools",
     summary="List demo MCP tools dynamically discovered from the server",
@@ -202,6 +205,10 @@ async def get_agent_status() -> dict[str, Any]:
 )
 async def get_agent_tools() -> list[dict[str, Any]]:
     """Discover tools dynamically using the real MCP stdio client."""
+    global _CACHED_DEMO_TOOLS
+    if _CACHED_DEMO_TOOLS is not None:
+        return _CACHED_DEMO_TOOLS
+
     server_script = ensure_demo_server_generated()
     target_base = get_target_base_url()
 
@@ -210,11 +217,10 @@ async def get_agent_tools() -> list[dict[str, Any]]:
         env={"TARGET_BASE_URL": target_base},
     )
 
-
     try:
         async with client:
             tools = await client.list_tools()
-            return [
+            result = [
                 {
                     "name": t.name,
                     "description": t.description,
@@ -222,6 +228,8 @@ async def get_agent_tools() -> list[dict[str, Any]]:
                 }
                 for t in tools
             ]
+            _CACHED_DEMO_TOOLS = result
+            return result
     except Exception as err:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

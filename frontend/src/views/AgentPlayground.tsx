@@ -59,13 +59,18 @@ export const AgentPlayground: React.FC = () => {
   const [resetMessage, setResetMessage] = useState<string | null>(null);
 
   // Load available tools and security state
-  const loadTools = async () => {
+  const loadTools = async (retryCount = 0) => {
     setIsLoadingTools(true);
     try {
       const discovered = await api.getAgentTools();
       setTools(discovered);
+      setExecutionError(null);
     } catch (err: any) {
-      setExecutionError(err.message || 'Failed to discover agent tools. Verify backend server is running.');
+      if (retryCount < 2) {
+        setTimeout(() => loadTools(retryCount + 1), 1500);
+      } else {
+        setExecutionError(err.message || 'Failed to discover agent tools. Verify backend server is running.');
+      }
     } finally {
       setIsLoadingTools(false);
     }
@@ -576,8 +581,16 @@ export const AgentPlayground: React.FC = () => {
             </div>
 
             {tools.length === 0 ? (
-              <div className="text-xs text-ink-muted py-2">
-                {isLoadingTools ? 'Discovering tools via stdio...' : 'No tools available.'}
+              <div className="text-xs text-ink-muted py-2 flex items-center justify-between">
+                <span>{isLoadingTools ? 'Discovering tools via stdio...' : 'No tools available.'}</span>
+                {!isLoadingTools && (
+                  <button
+                    onClick={() => loadTools()}
+                    className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline font-medium ml-2"
+                  >
+                    Retry
+                  </button>
+                )}
               </div>
             ) : (
               <div className="space-y-1 max-h-[460px] overflow-y-auto pr-0.5">
