@@ -1,0 +1,33 @@
+openapi: 3.0.3
+info:
+  title: Colliding Operations API
+  version: 1.0.0
+paths:
+  /tasks:
+    get:
+      operationId: list_tasks
+      summary: List active tasks
+      responses:
+        '200':
+          description: OK
+
+  /archived-tasks:
+    get:
+      operationId: listTasks
+      summary: List archived tasks (camelCase collision with list_tasks)
+      responses:
+        '200':
+          description: OK
+
+  /duplicate-fallback:
+    get:
+      summary: No operation ID (fallback get_duplicate_fallback)
+      responses:
+        '200':
+          description: OK
+    post:
+      operationId: get_duplicate_fallback
+      summary: Explicit operation ID colliding with fallback of previous GET
+      responses:
+        '200':
+          description: OK

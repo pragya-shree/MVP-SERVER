@@ -1,0 +1,74 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Modern Notes API 3.1",
+    "description": "An OpenAPI 3.1 specification demonstrating modern features.",
+    "version": "2.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://api.notes.example.com"
+    }
+  ],
+  "paths": {
+    "/notes": {
+      "get": {
+        "operationId": "getNotes",
+        "summary": "List all notes",
+        "responses": {
+          "200": {
+            "description": "Array of notes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Note"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createNote",
+        "summary": "Create a note",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Note"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created note"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Note": {
+        "type": "object",
+        "required": ["id", "title"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "content": {
+            "type": ["string", "null"]
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,15 @@
+openapi: 3.0.3
+info:
+  title: External Reference API
+  version: 1.0.0
+paths:
+  /users:
+    get:
+      operationId: getUsers
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: 'https://example.com/schemas/user.json'

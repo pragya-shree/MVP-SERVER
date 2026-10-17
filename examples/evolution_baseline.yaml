@@ -1,0 +1,97 @@
+openapi: 3.0.3
+info:
+  title: Store Inventory API
+  description: Baseline Store API for specification evolution demonstration.
+  version: 1.0.0
+servers:
+  - url: http://127.0.0.1:8000/v1
+    description: Local Test Server
+
+paths:
+  /items:
+    get:
+      operationId: list_items
+      summary: List inventory items
+      parameters:
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Item'
+
+    post:
+      operationId: create_item
+      summary: Add an inventory item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateItemRequest'
+      responses:
+        '201':
+          description: Item created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Item'
+
+  /items/{item_id}:
+    parameters:
+      - name: item_id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: get_item
+      summary: Retrieve item details
+      responses:
+        '200':
+          description: Item details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Item'
+        '404':
+          description: Not found
+    delete:
+      operationId: delete_item
+      summary: Remove an item
+      responses:
+        '204':
+          description: Deleted
+
+components:
+  schemas:
+    Item:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        price:
+          type: number
+
+    CreateItemRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        price:
+          type: number

@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  anything-to-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: anything-to-mcp-service
+    ports:
+      - "8000:8000"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:8000,http://127.0.0.1:8000
+      - GENERATOR_STORAGE_DIR=/app/storage/artifacts
+      - DEMO_API_BASE_URL=http://127.0.0.1:8000/demo-target
+    volumes:
+      # Optional persistence volume for generated ZIP artifacts across container restarts
+      - mcp-storage:/app/storage/artifacts
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  mcp-storage:

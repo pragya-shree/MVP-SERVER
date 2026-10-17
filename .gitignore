@@ -1,0 +1,50 @@
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environments
+.venv/
+venv/
+env/
+ENV/
+build/
+dist/
+*.egg-info/
+
+# Environment variables & local secrets
+.env
+.env.*
+!.env.example
+
+# Testing & linting
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Generated outputs
+generated/*
+!generated/.gitkeep
+backend/generated/*
+
+
+# IDE & OS files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+
+# Storage artifacts
+storage/artifacts/*
+!storage/artifacts/.gitkeep

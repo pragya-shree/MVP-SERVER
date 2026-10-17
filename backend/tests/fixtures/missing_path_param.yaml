@@ -1,0 +1,16 @@
+openapi: 3.0.3
+info:
+  title: Missing Path Param API
+  version: 1.0.0
+paths:
+  /projects/{project_id}/items:
+    get:
+      operationId: getProjectItems
+      parameters:
+        - name: query_only
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
