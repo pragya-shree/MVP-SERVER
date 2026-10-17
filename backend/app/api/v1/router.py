@@ -775,10 +775,15 @@ async def test_server_connection(
         )
 
     tested_at = datetime.now(timezone.utc).isoformat()
+    client_env = {}
+    if metadata.get("base_url"):
+        client_env["TARGET_BASE_URL"] = str(metadata["base_url"])
+
     client = MCPClient(
         server_script=str(server_script),
         command=sys.executable,
         args=[str(server_script)],
+        env=client_env,
         timeout=15.0,
     )
 
@@ -1073,11 +1078,16 @@ async def execute_server_tool(
             detail=f"Generated server script '{server_script.name}' not found.",
         )
 
+    client_env = {}
+    if metadata.get("base_url"):
+        client_env["TARGET_BASE_URL"] = str(metadata["base_url"])
+
     # Invoke tool via MCPClient
     client = MCPClient(
         server_script=str(server_script),
         command=sys.executable,
         args=[str(server_script)],
+        env=client_env,
         timeout=25.0,
     )
 
