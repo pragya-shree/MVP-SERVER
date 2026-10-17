@@ -192,6 +192,23 @@ export const api = {
   getServerIntegrations: async (generationId: string): Promise<import('./types').IntegrationsResponse> => {
     return request(`/api/v1/servers/${generationId}/integrations`);
   },
+
+  executeTool: async (
+    generationId: string,
+    toolName: string,
+    args: Record<string, any> = {},
+    approvalId?: string
+  ): Promise<import('./types').ToolExecuteResponse> => {
+    return request(`/api/v1/servers/${generationId}/execute-tool`, {
+      method: 'POST',
+      body: JSON.stringify({
+        tool_name: toolName,
+        arguments: args,
+        approval_id: approvalId,
+      }),
+    });
+  },
 };
+
 
 

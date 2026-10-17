@@ -18,7 +18,12 @@ from fastapi import (
 from fastapi.responses import FileResponse
 
 from agent.client import MCPClient
-from backend.security import global_audit_logger
+from backend.security import (
+    PolicyDecision,
+    global_approval_store,
+    global_audit_logger,
+    global_policy_engine,
+)
 from backend.security.redaction import global_redactor
 from backend.app.api.v1.schemas import (
     ConnectionTestResponse,
@@ -31,6 +36,8 @@ from backend.app.api.v1.schemas import (
     ServerGenerateResponse,
     SpecValidateRequest,
     SpecValidateResponse,
+    ToolExecuteRequest,
+    ToolExecuteResponse,
     ToolMetadata,
     ToolsInspectResponse,
 )
@@ -873,4 +880,295 @@ async def get_server_integrations(
         )
 
     return generate_client_integrations(generation_id, metadata, server_script)
+
+
+@router.post(
+    "/servers/{generation_id}/execute-tool",
+    response_model=ToolExecuteResponse,
+    summary="Execute an individual tool against a generated MCP server",
+    description="Invokes a specific tool on the generated server over stdio with full policy engine evaluation, argument sanitization, and audit logging.",
+)
+async def execute_server_tool(
+    payload: ToolExecuteRequest,
+    generation_id: str = Path(..., description="UUID identifier of the generation run"),
+) -> ToolExecuteResponse:
+    """Execute a specific MCP tool with arguments, enforcing all security guardrails."""
+    try:
+        storage_service.validate_generation_id(generation_id)
+    except ValueError as err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
+
+    metadata = storage_service.get_metadata(generation_id)
+    if not metadata:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Generation run '{generation_id}' not found or expired.",
+        )
+
+    # Locate tool metadata
+    tools = metadata.get("tools", [])
+    tool_meta = next((t for t in tools if t.get("name") == payload.tool_name), None)
+    if not tool_meta:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Tool '{payload.tool_name}' not found in generated server '{metadata.get('package_name')}'.",
+        )
+
+    method = str(tool_meta.get("method", "GET")).upper()
+    path = str(tool_meta.get("path", ""))
+    is_mutating = method in ("POST", "PUT", "PATCH", "DELETE")
+    package_name = metadata.get("package_name", "server")
+
+    # Evaluate security policy
+    eval_res = global_policy_engine.evaluate(
+        tool_name=payload.tool_name,
+        method=method,
+        path=path,
+    )
+    decision = eval_res.decision
+
+    # Guardrail 1: Policy Deny (Absolute precedence)
+    if decision == PolicyDecision.DENY:
+        global_audit_logger.record(
+            tool_name=payload.tool_name,
+            method=method,
+            path=path,
+            policy_decision="DENY",
+            execution_status="BLOCKED",
+            is_mutating=is_mutating,
+            arguments=payload.arguments,
+            reason=f"Operation '{payload.tool_name}' is forbidden by security policy.",
+            status_code=403,
+        )
+        return ToolExecuteResponse(
+            success=False,
+            generation_id=generation_id,
+            tool_name=payload.tool_name,
+            arguments=payload.arguments,
+            is_error=True,
+            policy_decision="DENY",
+            execution_status="BLOCKED",
+            error=f"Operation '{payload.tool_name}' ({method} {path}) is forbidden by security policy.",
+        )
+
+    # Guardrail 2: Dry-Run Mode Interception
+    if decision == PolicyDecision.DRY_RUN and is_mutating:
+        safe_args, _ = global_redactor.redact_json(payload.arguments)
+        global_audit_logger.record(
+            tool_name=payload.tool_name,
+            method=method,
+            path=path,
+            policy_decision="DRY_RUN",
+            execution_status="DRY-RUN",
+            is_mutating=True,
+            arguments=safe_args,
+            reason="Dry-run mode intercepted mutating request before dispatch.",
+            status_code=200,
+        )
+        return ToolExecuteResponse(
+            success=True,
+            generation_id=generation_id,
+            tool_name=payload.tool_name,
+            arguments=safe_args,
+            is_error=False,
+            policy_decision="DRY_RUN",
+            execution_status="DRY-RUN",
+            result={
+                "status": "DRY_RUN_INTERCEPTED",
+                "action": f"{method} {path}",
+                "message": "Dry-run mode is enabled. The upstream request was not sent.",
+                "method": method,
+                "path": path,
+                "arguments": safe_args,
+                "is_mutating": True,
+            },
+            content=f"Dry-run mode intercepted {method} {path}. Upstream request was not sent.",
+        )
+
+    # Guardrail 3: Explicit Human Approval Mode
+    if decision == PolicyDecision.REQUIRE_APPROVAL and is_mutating:
+        if not payload.approval_id:
+            req = global_approval_store.create_request(
+                tool_name=payload.tool_name,
+                method=method,
+                path=path,
+                arguments=payload.arguments,
+                reason=f"Mutating operation {method} {path} requires human approval",
+            )
+            safe_args, _ = global_redactor.redact_json(payload.arguments)
+            global_audit_logger.record(
+                tool_name=payload.tool_name,
+                method=method,
+                path=path,
+                policy_decision="REQUIRE_APPROVAL",
+                execution_status="PENDING APPROVAL",
+                is_mutating=True,
+                arguments=safe_args,
+                reason="Pending human approval confirmation.",
+                status_code=202,
+                approval_id=req.approval_id,
+            )
+            return ToolExecuteResponse(
+                success=False,
+                generation_id=generation_id,
+                tool_name=payload.tool_name,
+                arguments=safe_args,
+                is_error=False,
+                requires_approval=True,
+                approval_id=req.approval_id,
+                policy_decision="REQUIRE_APPROVAL",
+                execution_status="PENDING APPROVAL",
+                pending_action={
+                    "tool_name": payload.tool_name,
+                    "method": method,
+                    "path": path,
+                    "arguments": safe_args,
+                    "approval_id": req.approval_id,
+                    "expires_at": req.expires_at,
+                },
+                error=f"Approval required to execute {method} {path}. Re-invoke with approval_id='{req.approval_id}'.",
+            )
+        else:
+            valid, msg, _bound_args = global_approval_store.consume_and_verify(
+                approval_id=payload.approval_id,
+                tool_name=payload.tool_name,
+                arguments=payload.arguments,
+            )
+            if not valid:
+                global_audit_logger.record(
+                    tool_name=payload.tool_name,
+                    method=method,
+                    path=path,
+                    policy_decision="REQUIRE_APPROVAL",
+                    execution_status="FAILED",
+                    is_mutating=True,
+                    arguments=payload.arguments,
+                    reason=f"Approval verification failed: {msg}",
+                    status_code=403,
+                )
+                return ToolExecuteResponse(
+                    success=False,
+                    generation_id=generation_id,
+                    tool_name=payload.tool_name,
+                    arguments=payload.arguments,
+                    is_error=True,
+                    policy_decision="REQUIRE_APPROVAL",
+                    execution_status="FAILED",
+                    error=msg,
+                )
+
+    # Locate server.py script
+    gen_dir = storage_service.get_generation_dir(generation_id)
+    if not gen_dir:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Generation directory for '{generation_id}' not found.",
+        )
+
+    server_script = (gen_dir / package_name / "server.py").resolve()
+    if not server_script.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Generated server script '{server_script.name}' not found.",
+        )
+
+    # Invoke tool via MCPClient
+    client = MCPClient(
+        server_script=str(server_script),
+        command=sys.executable,
+        args=[str(server_script)],
+        timeout=25.0,
+    )
+
+    call_args = dict(payload.arguments)
+    if payload.approval_id:
+        call_args["approval_id"] = payload.approval_id
+
+    try:
+        await client.connect()
+        tool_res = await client.call_tool(payload.tool_name, call_args)
+
+        # Redact secrets in raw_data or content
+        sanitized_data = tool_res.raw_data
+        redactions_data = 0
+        if isinstance(tool_res.raw_data, (dict, list)):
+            sanitized_data, redactions_data = global_redactor.redact_json(tool_res.raw_data)
+
+        sanitized_text = tool_res.content or ""
+        redactions_text = 0
+        if isinstance(tool_res.content, str):
+            sanitized_text, redactions_text = global_redactor.redact_text(tool_res.content)
+
+        total_redactions = redactions_data + redactions_text
+        has_redactions = total_redactions > 0
+
+        # Extract message / error if present in sanitized_data
+        err_msg = None
+        if tool_res.is_error:
+            if isinstance(sanitized_data, dict) and sanitized_data.get("message"):
+                err_msg = str(sanitized_data["message"])
+            else:
+                err_msg = sanitized_text or "Tool execution failed"
+
+        status_code = tool_res.status_code or (200 if not tool_res.is_error else 500)
+
+        global_audit_logger.record(
+            tool_name=payload.tool_name,
+            method=method,
+            path=path,
+            policy_decision=decision.value,
+            execution_status="EXECUTED" if not tool_res.is_error else "FAILED",
+            is_mutating=is_mutating,
+            arguments=payload.arguments,
+            status_code=status_code,
+            secrets_redacted=has_redactions,
+            redaction_count=total_redactions,
+            approval_id=payload.approval_id,
+            reason=f"Executed tool '{payload.tool_name}' through MCP stdio transport",
+        )
+
+        return ToolExecuteResponse(
+            success=not tool_res.is_error,
+            generation_id=generation_id,
+            tool_name=payload.tool_name,
+            arguments=payload.arguments,
+            result=sanitized_data,
+            content=sanitized_text,
+            is_error=tool_res.is_error,
+            status_code=status_code,
+            policy_decision=decision.value,
+            execution_status="EXECUTED" if not tool_res.is_error else "FAILED",
+            secrets_redacted=has_redactions,
+            redaction_count=total_redactions,
+            error=err_msg,
+        )
+    except Exception as err:
+        raw_error = str(err)
+        sanitized_error, _ = global_redactor.redact_text(raw_error)
+
+        global_audit_logger.record(
+            tool_name=payload.tool_name,
+            method=method,
+            path=path,
+            policy_decision=decision.value,
+            execution_status="FAILED",
+            is_mutating=is_mutating,
+            arguments=payload.arguments,
+            reason=f"Execution failed: {sanitized_error}",
+            status_code=500,
+        )
+
+        return ToolExecuteResponse(
+            success=False,
+            generation_id=generation_id,
+            tool_name=payload.tool_name,
+            arguments=payload.arguments,
+            is_error=True,
+            policy_decision=decision.value,
+            execution_status="FAILED",
+            error=sanitized_error,
+        )
+    finally:
+        await client.close()
+
 

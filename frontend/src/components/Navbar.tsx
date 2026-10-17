@@ -2,8 +2,8 @@ import React from 'react';
 import { Terminal } from 'lucide-react';
 
 interface NavbarProps {
-  activeView: 'landing' | 'generator' | 'playground';
-  setActiveView: (view: 'landing' | 'generator' | 'playground') => void;
+  activeView: 'landing' | 'generator' | 'playground' | 'multi-api';
+  setActiveView: (view: 'landing' | 'generator' | 'playground' | 'multi-api') => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ activeView, setActiveView }) => {
@@ -52,6 +52,19 @@ export const Navbar: React.FC<NavbarProps> = ({ activeView, setActiveView }) => 
             }`}
           >
             Agent Playground
+          </button>
+          <button
+            onClick={() => setActiveView('multi-api')}
+            className={`px-3 py-1.5 rounded transition-colors inline-flex items-center space-x-1.5 ${
+              activeView === 'multi-api'
+                ? 'bg-accent-light text-accent font-medium'
+                : 'text-ink-muted hover:text-ink hover:bg-canvas'
+            }`}
+          >
+            <span>Multi-API</span>
+            <span className="text-[9px] font-semibold tracking-wider px-1 py-0.2 rounded bg-amber-100 text-amber-800 border border-amber-300/70 font-mono">
+              PREMIUM
+            </span>
           </button>
         </nav>
       </div>

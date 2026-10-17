@@ -4,9 +4,10 @@ import { Footer } from './components/Footer';
 import { LandingPage } from './views/LandingPage';
 import { GeneratorWorkspace } from './views/GeneratorWorkspace';
 import { AgentPlayground } from './views/AgentPlayground';
+import { MultiApiWorkspace } from './views/MultiApiWorkspace';
 
 export function App() {
-  const [activeView, setActiveView] = useState<'landing' | 'generator' | 'playground'>('landing');
+  const [activeView, setActiveView] = useState<'landing' | 'generator' | 'playground' | 'multi-api'>('landing');
 
   return (
     <div className="min-h-screen flex flex-col bg-canvas text-ink font-sans selection:bg-accent selection:text-white">
@@ -23,6 +24,9 @@ export function App() {
         )}
         {activeView === 'playground' && (
           <AgentPlayground />
+        )}
+        {activeView === 'multi-api' && (
+          <MultiApiWorkspace />
         )}
       </main>
 

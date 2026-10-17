@@ -136,3 +136,33 @@ class IntegrationsResponse(BaseModel):
     available_transports: list[str] = Field(default_factory=lambda: ["stdio"])
     integrations: list[IntegrationConfigItem] = Field(default_factory=list)
 
+
+class ToolExecuteRequest(BaseModel):
+    """Payload to execute an individual MCP tool on a generated server."""
+
+    tool_name: str = Field(description="Name of the MCP tool to execute")
+    arguments: dict[str, Any] = Field(default_factory=dict, description="Input arguments for the tool")
+    approval_id: Optional[str] = Field(default=None, description="Optional security approval ID for sensitive operations")
+
+
+class ToolExecuteResponse(BaseModel):
+    """Result of executing an individual tool on a generated MCP server."""
+
+    success: bool = Field(description="Whether the tool execution completed successfully")
+    generation_id: str = Field(description="UUID of the generated server")
+    tool_name: str = Field(description="Tool name that was executed")
+    arguments: dict[str, Any] = Field(default_factory=dict, description="Arguments passed to tool")
+    result: Optional[Any] = Field(default=None, description="Structured tool execution result")
+    content: Optional[str] = Field(default=None, description="Raw content text returned by tool")
+    is_error: bool = Field(default=False, description="Whether tool execution reported an error")
+    status_code: Optional[int] = Field(default=None, description="HTTP status code from target API")
+    policy_decision: Optional[str] = Field(default=None, description="Security policy decision")
+    execution_status: Optional[str] = Field(default=None, description="Execution outcome status")
+    secrets_redacted: bool = Field(default=False, description="Whether sensitive data was redacted")
+    redaction_count: int = Field(default=0, description="Number of redacted secrets")
+    requires_approval: bool = Field(default=False, description="Whether operation requires human approval")
+    approval_id: Optional[str] = Field(default=None, description="Approval ID if approval is required")
+    pending_action: Optional[dict[str, Any]] = Field(default=None, description="Pending action details")
+    error: Optional[str] = Field(default=None, description="Sanitized error message if failed")
+
+

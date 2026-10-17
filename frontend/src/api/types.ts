@@ -192,4 +192,37 @@ export interface ConnectionTestResponse {
   error?: string;
 }
 
+export interface ToolExecuteRequest {
+  tool_name: string;
+  arguments?: Record<string, any>;
+  approval_id?: string;
+}
+
+export interface ToolExecuteResponse {
+  success: boolean;
+  generation_id: string;
+  tool_name: string;
+  arguments: Record<string, any>;
+  result?: any;
+  content?: string;
+  is_error: boolean;
+  status_code?: number;
+  policy_decision?: string;
+  execution_status?: string;
+  secrets_redacted: boolean;
+  redaction_count: number;
+  requires_approval: boolean;
+  approval_id?: string;
+  pending_action?: {
+    tool_name?: string;
+    method?: string;
+    path?: string;
+    arguments?: Record<string, any>;
+    approval_id?: string;
+    expires_at?: number;
+  };
+  error?: string;
+}
+
+
 
