@@ -19,7 +19,33 @@ router = APIRouter(prefix="/api/v1", tags=["agent-demo"])
 REPO_ROOT = Path(__file__).resolve().parents[4]
 EXAMPLES_DIR = REPO_ROOT / "examples"
 DEMO_SPEC_FILE = EXAMPLES_DIR / "task_management_api.yaml"
-GENERATED_DIR = REPO_ROOT / "generated" / "demo_task_mcp"
+
+
+def _get_demo_generated_dir() -> Path:
+    """Get writable directory for demo task MCP package."""
+    storage_dir = Path(os.environ.get("GENERATOR_STORAGE_DIR", "/tmp/anything-to-mcp/artifacts"))
+    if os.getenv("VERCEL") or os.getenv("VERCEL_ENV") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
+        target_dir = storage_dir / "demo_task_mcp"
+    else:
+        target_dir = REPO_ROOT / "generated" / "demo_task_mcp"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    return target_dir
+
+
+GENERATED_DIR = _get_demo_generated_dir()
+
+
+def get_target_base_url(base_url: Optional[str] = None) -> str:
+    """Resolve target API base URL for demo operations."""
+    if base_url:
+        return base_url
+    if "DEMO_API_BASE_URL" in os.environ and os.environ["DEMO_API_BASE_URL"].strip():
+        return os.environ["DEMO_API_BASE_URL"].strip()
+    vercel_url = os.environ.get("VERCEL_URL", "").strip()
+    if vercel_url:
+        return f"https://{vercel_url}/demo-target"
+    return "http://127.0.0.1:8000/demo-target"
+
 
 
 from backend.security import (
@@ -98,18 +124,22 @@ class DemoSpecResponse(BaseModel):
 
 def ensure_demo_server_generated(base_url: Optional[str] = None) -> Path:
     """Ensure generated/demo_task_mcp/server.py exists and is runnable."""
-    target_base = base_url or os.environ.get("DEMO_API_BASE_URL", "http://127.0.0.1:8000/demo-target")
-    server_script = GENERATED_DIR / "server.py"
+    target_base = get_target_base_url(base_url)
+    gen_dir = _get_demo_generated_dir()
+    server_script = gen_dir / "server.py"
 
     if not server_script.exists():
-        api_model = parse_openapi(demo_fastapi_app.openapi())
-        generate_mcp_server(
-            api=api_model,
-            output_dir=GENERATED_DIR,
-            package_name="demo_task_mcp",
-            base_url=target_base,
-            overwrite=True,
-        )
+        try:
+            api_model = parse_openapi(demo_fastapi_app.openapi())
+            generate_mcp_server(
+                api=api_model,
+                output_dir=gen_dir,
+                package_name="demo_task_mcp",
+                base_url=target_base,
+                overwrite=True,
+            )
+        except Exception:
+            pass
 
     return server_script
 
@@ -130,7 +160,7 @@ async def get_demo_spec() -> DemoSpecResponse:
 
     content = DEMO_SPEC_FILE.read_text(encoding="utf-8")
     api = parse_openapi(content)
-    base_url = os.environ.get("DEMO_API_BASE_URL", "http://127.0.0.1:8000/demo-target")
+    base_url = get_target_base_url()
 
     return DemoSpecResponse(
         filename="task_management_api.yaml",
@@ -152,7 +182,7 @@ async def get_agent_status() -> dict[str, Any]:
     """Check readiness of agent, MCP server, and in-memory demo data."""
     server_script = ensure_demo_server_generated()
     summary = demo_repository.get_summary()
-    target_base = os.environ.get("DEMO_API_BASE_URL", "http://127.0.0.1:8000/demo-target")
+    target_base = get_target_base_url()
 
     return {
         "status": "ready",
@@ -173,12 +203,13 @@ async def get_agent_status() -> dict[str, Any]:
 async def get_agent_tools() -> list[dict[str, Any]]:
     """Discover tools dynamically using the real MCP stdio client."""
     server_script = ensure_demo_server_generated()
-    target_base = os.environ.get("DEMO_API_BASE_URL", "http://127.0.0.1:8000/demo-target")
+    target_base = get_target_base_url()
 
     client = MCPClient(
         server_script=server_script,
         env={"TARGET_BASE_URL": target_base},
     )
+
 
     try:
         async with client:
@@ -328,7 +359,7 @@ async def get_audit_log(limit: int = 50) -> list[dict[str, Any]]:
 async def execute_agent_request(payload: AgentExecuteRequest) -> AgentExecuteResponse:
     """Execute natural language query through the real MCPAgent over stdio transport with guardrails."""
     server_script = ensure_demo_server_generated()
-    target_base = os.environ.get("DEMO_API_BASE_URL", "http://127.0.0.1:8000/demo-target")
+    target_base = get_target_base_url()
 
     # Pass active guardrail environment variables to child MCP server
     policy = global_policy_engine.policy

@@ -800,15 +800,16 @@ async def test_server_connection(
             status_code=200,
         )
 
+        transport_name = "stdio" if not getattr(client, "_in_process_mode", False) else "in-process"
         return ConnectionTestResponse(
             success=True,
             generation_id=generation_id,
             package_name=package_name,
-            transport="stdio",
+            transport=transport_name,
             tool_count=len(tool_names),
             discovered_tools=tool_names,
             tested_at=tested_at,
-            message=f"Successfully initialized MCP stdio session and discovered {len(tool_names)} tools.",
+            message=f"Successfully initialized MCP {transport_name} session and discovered {len(tool_names)} tools.",
             error=None,
         )
     except Exception as err:

@@ -64,65 +64,13 @@ for _local in ("http://localhost:5173", "http://127.0.0.1:5173", "http://localho
 
 os.environ["ALLOWED_ORIGINS"] = ",".join(_origins)
 
+# Configure DEMO_API_BASE_URL for Vercel if not already explicitly set
+if "DEMO_API_BASE_URL" not in os.environ and _vercel_url:
+    os.environ["DEMO_API_BASE_URL"] = f"https://{_vercel_url}/demo-target"
+
 # Import and instantiate the existing FastAPI app
 from backend.app.main import create_app  # noqa: E402
 
 app = create_app()
 
-# ---------------------------------------------------------------------------
-# Middleware: intercept subprocess-dependent endpoints with honest 503 responses
-# ---------------------------------------------------------------------------
-from fastapi import Request  # noqa: E402
-from fastapi.responses import JSONResponse  # noqa: E402
-
-_SUBPROCESS_UNAVAILABLE_RESPONSE = {
-    "error": "VERCEL_SUBPROCESS_UNAVAILABLE",
-    "detail": (
-        "This endpoint requires spawning a Python subprocess for MCP stdio communication. "
-        "Vercel serverless functions cannot create persistent child processes. "
-        "Deploy the backend on a persistent runtime (Docker, Railway, or Fly.io) "
-        "to use the Agent Playground and real-time MCP tool execution."
-    ),
-    "docs": "https://github.com/pragya-shree/MVP-SERVER#deployment",
-    "affected_features": [
-        "Agent Playground (natural language -> MCP tool execution)",
-        "Multi-API Workspace tool execution runner",
-        "MCP server connection testing",
-    ],
-}
-
-# Exact paths that require subprocesses
-_SUBPROCESS_EXACT_PATHS = {
-    "/api/v1/agent/tools",
-    "/api/v1/agent/execute",
-    "/api/v1/agent/status",
-}
-
-# Regex patterns for parameterised subprocess-dependent paths (POST only)
-_SUBPROCESS_PATH_PATTERNS = [
-    re.compile(r"^/api/v1/servers/[^/]+/execute-tool$"),
-    re.compile(r"^/api/v1/servers/[^/]+/test-connection$"),
-]
-
-
-@app.middleware("http")
-async def intercept_subprocess_endpoints(request: Request, call_next):
-    """Return 503 for subprocess‑dependent endpoints only on Vercel."""
-    # Detect Vercel environment via VERCEL=1 or VERCEL_ENV presence
-    _SERVERLESS_DETECTED = bool(os.getenv("VERCEL") == "1" or os.getenv("VERCEL_ENV"))
-    if not _SERVERLESS_DETECTED:
-        # In Docker / Render allow normal processing
-        return await call_next(request)
-
-    path = request.url.path
-
-    if path in _SUBPROCESS_EXACT_PATHS:
-        return JSONResponse(status_code=503, content=_SUBPROCESS_UNAVAILABLE_RESPONSE)
-
-    if request.method == "POST":
-        for pattern in _SUBPROCESS_PATH_PATTERNS:
-            if pattern.match(path):
-                return JSONResponse(status_code=503, content=_SUBPROCESS_UNAVAILABLE_RESPONSE)
-
-    return await call_next(request)
 
