@@ -9,9 +9,17 @@ import type {
   AgentResetResponse,
 } from './types';
 
-export const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
-).replace(/\/+$/, '');
+// On Vercel: set VITE_API_BASE_URL="" (empty string) in Vercel dashboard env vars
+// so the frontend calls /api/... relative to the same origin (routed to Python fn).
+// For local dev: set VITE_API_BASE_URL=http://127.0.0.1:8000
+export const API_BASE_URL = (() => {
+  const configured = import.meta.env.VITE_API_BASE_URL;
+  // Explicitly check for undefined (not set) vs '' (set to empty = same-origin)
+  if (configured === undefined || configured === null) {
+    return 'http://127.0.0.1:8000';
+  }
+  return configured.replace(/\/+$/, '');
+})();
 
 class ApiError extends Error {
   status: number;

@@ -1,0 +1,42 @@
+﻿{
+  "version": 2,
+  "framework": null,
+  "functions": {
+    "api/index.py": {
+      "runtime": "python3.12",
+      "maxDuration": 60,
+      "memory": 1024
+    }
+  },
+  "buildCommand": "cd frontend && npm install && npm run build",
+  "outputDirectory": "frontend/dist",
+  "routes": [
+    {
+      "src": "/health",
+      "dest": "/api/index.py"
+    },
+    {
+      "src": "/redoc(.*)",
+      "dest": "/api/index.py"
+    },
+    {
+      "src": "/docs(.*)",
+      "dest": "/api/index.py"
+    },
+    {
+      "src": "/demo-target(.*)",
+      "dest": "/api/index.py"
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/index.py"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ]
+}
