@@ -107,7 +107,13 @@ _SUBPROCESS_PATH_PATTERNS = [
 
 @app.middleware("http")
 async def intercept_subprocess_endpoints(request: Request, call_next):
-    """Return 503 for endpoints that require stdio subprocess spawning on Vercel."""
+    """Return 503 for subprocess‑dependent endpoints only on Vercel."""
+    # Detect Vercel environment via VERCEL=1 or VERCEL_ENV presence
+    _SERVERLESS_DETECTED = bool(os.getenv("VERCEL") == "1" or os.getenv("VERCEL_ENV"))
+    if not _SERVERLESS_DETECTED:
+        # In Docker / Render allow normal processing
+        return await call_next(request)
+
     path = request.url.path
 
     if path in _SUBPROCESS_EXACT_PATHS:
