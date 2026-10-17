@@ -37,6 +37,7 @@ class MCPAgent:
         self,
         request: str,
         confirm_destructive: bool = False,
+        approval_id: Optional[str] = None,
     ) -> AgentResponse:
         """Process a natural language request through planning, validation, and MCP tool execution."""
         # Ensure MCP client is connected and tools are discovered
@@ -75,8 +76,8 @@ class MCPAgent:
 
         # Step 2: Execute planned actions with safety verification
         for action in plan.actions:
-            # Safety check: Destructive operations require explicit confirmation
-            if action.requires_confirmation and not confirm_destructive:
+            # Safety check: Destructive operations require explicit confirmation if not approved
+            if action.requires_confirmation and not confirm_destructive and not approval_id:
                 return AgentResponse(
                     success=False,
                     message=action.confirmation_message or f"Confirmation required to execute destructive action '{action.tool_name}'.",
@@ -86,10 +87,16 @@ class MCPAgent:
                         "arguments": action.arguments,
                         "reasoning": action.reasoning,
                     },
+                    policy_decision="REQUIRE_APPROVAL",
+                    execution_status="PENDING APPROVAL",
                 )
 
             # Step 3: Invoke tool through MCP stdio client
-            result = await self.client.call_tool(action.tool_name, action.arguments)
+            call_arguments = dict(action.arguments)
+            if approval_id:
+                call_arguments["approval_id"] = approval_id
+
+            result = await self.client.call_tool(action.tool_name, call_arguments)
             last_result = result
 
             invocation_record = {
@@ -100,6 +107,61 @@ class MCPAgent:
                 "response": result.raw_data if result.raw_data is not None else result.content,
             }
             tool_invocations.append(invocation_record)
+
+            raw = result.raw_data if isinstance(result.raw_data, dict) else {}
+
+            # Handle Guardrail: DRY_RUN_INTERCEPTED
+            if raw.get("status") == "DRY_RUN_INTERCEPTED":
+                return AgentResponse(
+                    success=True,
+                    message=raw.get("message", "Dry-run mode is enabled. The upstream request was not sent."),
+                    tool_invocations=tool_invocations,
+                    data=result.raw_data,
+                    policy_decision="DRY_RUN",
+                    execution_status="DRY-RUN",
+                )
+
+            # Handle Guardrail: PENDING_CONFIRMATION / PENDING_APPROVAL
+            if raw.get("status") == "PENDING_CONFIRMATION":
+                return AgentResponse(
+                    success=False,
+                    message=raw.get("message", "Operation requires explicit human approval."),
+                    requires_confirmation=True,
+                    requires_approval=True,
+                    approval_id=raw.get("approval_id"),
+                    pending_action={
+                        "tool_name": action.tool_name,
+                        "arguments": action.arguments,
+                        "reasoning": action.reasoning,
+                        "approval_id": raw.get("approval_id"),
+                    },
+                    tool_invocations=tool_invocations,
+                    data=result.raw_data,
+                    policy_decision="REQUIRE_APPROVAL",
+                    execution_status="PENDING APPROVAL",
+                )
+
+            # Handle Guardrail: Policy Denied
+            if raw.get("error") is True and raw.get("type") == "policy_denied":
+                return AgentResponse(
+                    success=False,
+                    message=raw.get("message", f"Operation '{action.tool_name}' forbidden by security policy."),
+                    tool_invocations=tool_invocations,
+                    data=result.raw_data,
+                    policy_decision="DENY",
+                    execution_status="BLOCKED",
+                )
+
+            # Handle Guardrail: Approval Rejected or Expired
+            if raw.get("error") is True and raw.get("type") == "approval_rejected":
+                return AgentResponse(
+                    success=False,
+                    message=raw.get("message", "Approval verification failed or expired."),
+                    tool_invocations=tool_invocations,
+                    data=result.raw_data,
+                    policy_decision="REQUIRE_APPROVAL",
+                    execution_status="FAILED",
+                )
 
             # If tool invocation reported an error, halt and report actual failure
             if result.is_error:
@@ -116,6 +178,8 @@ class MCPAgent:
                     message=error_msg,
                     tool_invocations=tool_invocations,
                     data=result.raw_data,
+                    policy_decision="ALLOW",
+                    execution_status="FAILED",
                 )
 
         # Step 4: Construct user-facing success summary
@@ -125,7 +189,10 @@ class MCPAgent:
             message=message,
             tool_invocations=tool_invocations,
             data=last_result.raw_data if last_result else None,
+            policy_decision="ALLOW",
+            execution_status="EXECUTED",
         )
+
 
     def _format_success_message(self, action: PlanAction, result: Optional[MCPToolResult]) -> str:
         """Format a concise, informative success message based on executed action."""

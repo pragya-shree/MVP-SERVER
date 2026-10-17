@@ -87,12 +87,20 @@ export interface AgentExecuteResponse {
   tool_invocations: ToolInvocation[];
   data?: any;
   requires_confirmation: boolean;
+  requires_approval?: boolean;
+  approval_id?: string;
   pending_action?: {
     tool_name?: string;
     arguments?: Record<string, any>;
+    reasoning?: string;
+    approval_id?: string;
     requires_confirmation?: boolean;
     confirmation_prompt?: string;
   };
+  policy_decision?: string;
+  execution_status?: string;
+  secrets_redacted?: boolean;
+  redaction_count?: number;
 }
 
 export interface AgentResetResponse {
@@ -101,3 +109,87 @@ export interface AgentResetResponse {
   message: string;
   total_tasks?: number;
 }
+
+export interface SecurityConfig {
+  dry_run: boolean;
+  require_approval: boolean;
+  mask_secrets: boolean;
+  denied_operations: string[];
+  denied_methods: string[];
+  active_policy: string;
+}
+
+export interface ApprovalRequestItem {
+  approval_id: string;
+  tool_name: string;
+  method: string;
+  path: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED' | 'EXECUTED';
+  safe_arguments: Record<string, any>;
+  reason: string;
+  created_at: string;
+  expires_at: string;
+  ttl_remaining_seconds: number;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string;
+  tool_name: string;
+  method: string;
+  sanitized_path: string;
+  policy_decision: string;
+  execution_status: string;
+  is_mutating: boolean;
+  secrets_redacted: boolean;
+  redaction_count: number;
+  safe_arguments?: Record<string, any>;
+  reason?: string;
+  status_code?: number;
+  approval_id?: string;
+}
+
+export interface IntegrationVariable {
+  name: string;
+  description: string;
+  required: boolean;
+  placeholder: string;
+}
+
+export interface IntegrationConfigItem {
+  id: string;
+  name: string;
+  transport: string;
+  format: string;
+  target_file?: string;
+  snippet: string;
+  prerequisites: string[];
+  setup_steps: string[];
+  environment_variables: IntegrationVariable[];
+  is_available: boolean;
+  notes?: string;
+}
+
+export interface IntegrationsResponse {
+  generation_id: string;
+  package_name: string;
+  server_path: string;
+  base_url: string;
+  read_only: boolean;
+  available_transports: string[];
+  integrations: IntegrationConfigItem[];
+}
+
+export interface ConnectionTestResponse {
+  success: boolean;
+  generation_id: string;
+  package_name: string;
+  transport: string;
+  tool_count: number;
+  discovered_tools: string[];
+  tested_at: string;
+  message: string;
+  error?: string;
+}
+
+

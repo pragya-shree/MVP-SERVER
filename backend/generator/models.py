@@ -222,7 +222,11 @@ class GenerationResult(BaseModel):
     tool_names: list[str] = Field(default_factory=list, description="List of generated MCP tool names")
     operation_count: int = Field(description="Total number of operations included in server")
     read_only: bool = Field(default=False, description="Whether server was generated in read-only mode")
+    dry_run: bool = Field(default=False, description="Whether dry-run mode is enabled")
+    require_approval: bool = Field(default=False, description="Whether approval mode is enabled")
+    mask_secrets: bool = Field(default=True, description="Whether secret masking is enabled")
     base_url: str = Field(description="Configured default base URL")
     files_created: list[Path] = Field(default_factory=list, description="List of generated files")
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
+

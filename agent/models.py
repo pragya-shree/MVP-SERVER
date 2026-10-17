@@ -75,3 +75,9 @@ class AgentResponse:
     data: Optional[Any] = None
     requires_confirmation: bool = False
     pending_action: Optional[dict[str, Any]] = None
+    approval_id: Optional[str] = None
+    requires_approval: bool = False
+    policy_decision: Optional[str] = None
+    execution_status: Optional[str] = None
+    secrets_redacted: bool = False
+

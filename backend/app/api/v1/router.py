@@ -3,6 +3,8 @@
 from datetime import datetime, timezone
 import json
 import re
+from pathlib import Path as FilePath
+import sys
 from typing import Any, Optional
 import urllib.parse
 
@@ -15,8 +17,15 @@ from fastapi import (
 )
 from fastapi.responses import FileResponse
 
+from agent.client import MCPClient
+from backend.security import global_audit_logger
+from backend.security.redaction import global_redactor
 from backend.app.api.v1.schemas import (
+    ConnectionTestResponse,
     GeneratorHealthResponse,
+    IntegrationConfigItem,
+    IntegrationVariable,
+    IntegrationsResponse,
     OperationSummary,
     ServerGenerateRequest,
     ServerGenerateResponse,
@@ -403,3 +412,465 @@ async def download_server_package(
         filename=filename,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+def generate_client_integrations(
+    generation_id: str,
+    metadata: dict[str, Any],
+    server_script: FilePath,
+) -> IntegrationsResponse:
+    """Construct verified client configurations with security placeholders."""
+    pkg_name = metadata.get("package_name", "mcp_server")
+    base_url = metadata.get("base_url", "http://localhost:8000")
+    read_only = bool(metadata.get("read_only", False))
+    raw_script_path = str(server_script)
+
+    common_env_vars = [
+        IntegrationVariable(
+            name="TARGET_BASE_URL",
+            description="Upstream API base URL that the MCP server dispatches requests to",
+            required=True,
+            placeholder=base_url,
+        ),
+        IntegrationVariable(
+            name="BEARER_TOKEN",
+            description="Bearer token for HTTP Authorization header (if target API requires auth)",
+            required=False,
+            placeholder="${YOUR_BEARER_TOKEN}",
+        ),
+        IntegrationVariable(
+            name="API_KEY",
+            description="API key for custom headers (if target API requires auth)",
+            required=False,
+            placeholder="${YOUR_API_KEY}",
+        ),
+        IntegrationVariable(
+            name="DRY_RUN",
+            description="When 'true', intercepts mutating operations without sending upstream requests",
+            required=False,
+            placeholder="false",
+        ),
+        IntegrationVariable(
+            name="REQUIRE_APPROVAL",
+            description="When 'true', requires explicit approval tokens for mutating operations",
+            required=False,
+            placeholder="false",
+        ),
+        IntegrationVariable(
+            name="MASK_SECRETS",
+            description="When 'true', redacts sensitive credentials and tokens in logs and results",
+            required=False,
+            placeholder="true",
+        ),
+    ]
+
+    # 1. Claude Desktop configuration
+    claude_desktop_snippet = json.dumps(
+        {
+            "mcpServers": {
+                pkg_name: {
+                    "command": "python",
+                    "args": [raw_script_path],
+                    "env": {
+                        "TARGET_BASE_URL": base_url,
+                        "BEARER_TOKEN": "${YOUR_BEARER_TOKEN}",
+                        "API_KEY": "${YOUR_API_KEY}",
+                        "MASK_SECRETS": "true",
+                    },
+                }
+            }
+        },
+        indent=2,
+    )
+
+    claude_desktop = IntegrationConfigItem(
+        id="claude-desktop",
+        name="Claude Desktop",
+        transport="stdio",
+        format="json",
+        target_file="~/Library/Application Support/Claude/claude_desktop_config.json (macOS) or %APPDATA%\\Claude\\claude_desktop_config.json (Windows)",
+        snippet=claude_desktop_snippet,
+        prerequisites=[
+            "Claude Desktop app installed",
+            "Python 3.10+ installed and available in PATH",
+            "Dependencies installed (pip install -r requirements.txt)",
+        ],
+        setup_steps=[
+            "Locate and open your Claude Desktop configuration file.",
+            f'Add the "{pkg_name}" definition under the "mcpServers" object.',
+            "Replace ${YOUR_BEARER_TOKEN} or ${YOUR_API_KEY} with your credentials if required.",
+            "Restart Claude Desktop to load the server and discover tools.",
+        ],
+        environment_variables=common_env_vars,
+        is_available=True,
+        notes="Uses standard local stdio transport. Claude Desktop spawns the server as a local child process.",
+    )
+
+    # 2. Claude Code CLI configuration
+    claude_code_snippet = (
+        f"claude mcp add {pkg_name} \\\n"
+        f'  -e TARGET_BASE_URL="{base_url}" \\\n'
+        f'  -e BEARER_TOKEN="${{YOUR_BEARER_TOKEN}}" \\\n'
+        f'  -- python "{raw_script_path}"'
+    )
+
+    claude_code = IntegrationConfigItem(
+        id="claude-code",
+        name="Claude Code",
+        transport="stdio",
+        format="bash",
+        target_file=None,
+        snippet=claude_code_snippet,
+        prerequisites=[
+            "Claude Code CLI installed (npm install -g @anthropic-ai/claude-code)",
+            "Python 3.10+ installed",
+        ],
+        setup_steps=[
+            "Run the 'claude mcp add' command in your terminal.",
+            "Provide real authentication values in environment variables if required.",
+            "Verify registration with 'claude mcp list'.",
+        ],
+        environment_variables=common_env_vars,
+        is_available=True,
+        notes="Spawns local Python process over stdio pipes.",
+    )
+
+    # 3. Cursor configuration
+    cursor_snippet = json.dumps(
+        {
+            "mcpServers": {
+                pkg_name: {
+                    "command": "python",
+                    "args": [raw_script_path],
+                    "env": {
+                        "TARGET_BASE_URL": base_url,
+                        "BEARER_TOKEN": "${YOUR_BEARER_TOKEN}",
+                        "API_KEY": "${YOUR_API_KEY}",
+                    },
+                }
+            }
+        },
+        indent=2,
+    )
+
+    cursor = IntegrationConfigItem(
+        id="cursor",
+        name="Cursor",
+        transport="stdio",
+        format="json",
+        target_file=".cursor/mcp.json",
+        snippet=cursor_snippet,
+        prerequisites=[
+            "Cursor IDE (0.40+)",
+            "MCP support enabled in Cursor Settings",
+            "Python 3.10+ in workspace environment",
+        ],
+        setup_steps=[
+            "Create or edit .cursor/mcp.json in your workspace root.",
+            "Paste the JSON configuration into the mcpServers map.",
+            "Set environment variables for authentication if needed.",
+            "Open Cursor Settings > Features > MCP to verify the server status.",
+        ],
+        environment_variables=common_env_vars,
+        is_available=True,
+        notes="Configured per-workspace in .cursor/mcp.json or globally in Cursor Settings.",
+    )
+
+    # 4. VS Code configuration
+    vscode_snippet = json.dumps(
+        {
+            "mcpServers": {
+                pkg_name: {
+                    "command": "python",
+                    "args": [raw_script_path],
+                    "env": {
+                        "TARGET_BASE_URL": base_url,
+                        "BEARER_TOKEN": "${YOUR_BEARER_TOKEN}",
+                        "API_KEY": "${YOUR_API_KEY}",
+                    },
+                }
+            }
+        },
+        indent=2,
+    )
+
+    vscode = IntegrationConfigItem(
+        id="vscode",
+        name="VS Code",
+        transport="stdio",
+        format="json",
+        target_file="mcp_settings.json (Cline / Roo Code settings)",
+        snippet=vscode_snippet,
+        prerequisites=[
+            "VS Code with an MCP-capable assistant extension (e.g. Cline, Roo Code, or Continue)",
+            "Python 3.10+",
+        ],
+        setup_steps=[
+            "Open extension MCP settings in VS Code.",
+            "Add the server definition under mcpServers.",
+            "Supply any required API credentials.",
+            "Save configuration and click Reconnect.",
+        ],
+        environment_variables=common_env_vars,
+        is_available=True,
+        notes="Works seamlessly with Roo Code, Cline, and any VS Code extension adhering to the standard MCP schema.",
+    )
+
+    # 5. Local / stdio execution
+    stdio_snippet = f"""# 1. Unzip the downloaded package:
+unzip {pkg_name}.zip -d {pkg_name}
+cd {pkg_name}
+
+# 2. Create and activate a virtual environment:
+python -m venv .venv
+# On Windows:
+.venv\\Scripts\\activate
+# On macOS/Linux:
+source .venv/bin/activate
+
+# 3. Install required dependencies:
+pip install -r requirements.txt
+
+# 4. Configure environment credentials:
+cp .env.example .env
+# Edit .env and supply TARGET_BASE_URL, BEARER_TOKEN, or API_KEY
+
+# 5. Start MCP server over stdio:
+python server.py"""
+
+    stdio = IntegrationConfigItem(
+        id="stdio",
+        name="Local / stdio",
+        transport="stdio",
+        format="bash",
+        target_file=None,
+        snippet=stdio_snippet,
+        prerequisites=[
+            "Python 3.10+",
+            "Extracted package archive",
+        ],
+        setup_steps=[
+            "Extract the generated ZIP archive.",
+            "Initialize Python venv and install dependencies from requirements.txt.",
+            "Configure credentials in local .env.",
+            "Execute server.py. It will listen for JSON-RPC messages on stdin/stdout.",
+        ],
+        environment_variables=common_env_vars,
+        is_available=True,
+        notes="Standard local process transport. Communicates over stdin/stdout using MCP JSON-RPC protocol.",
+    )
+
+    # 6. Docker container
+    docker_snippet = f"""# 1. Build Docker image from extracted package:
+docker build -t {pkg_name}:latest .
+
+# 2. Run container in interactive stdio mode:
+docker run -i --rm \\
+  -e TARGET_BASE_URL="{base_url}" \\
+  -e BEARER_TOKEN="${{YOUR_BEARER_TOKEN}}" \\
+  {pkg_name}:latest"""
+
+    docker = IntegrationConfigItem(
+        id="docker",
+        name="Docker",
+        transport="stdio",
+        format="bash",
+        target_file="Dockerfile",
+        snippet=docker_snippet,
+        prerequisites=[
+            "Docker Engine 20.10+",
+            "Extracted package directory",
+        ],
+        setup_steps=[
+            "Ensure package contains Dockerfile and requirements.txt.",
+            "Build container image using 'docker build'.",
+            "Launch container with '-i' flag so stdin/stdout are attached for MCP JSON-RPC.",
+        ],
+        environment_variables=common_env_vars,
+        is_available=True,
+        notes="Container must be executed interactively (-i) so the MCP client can communicate over stdio.",
+    )
+
+    # 7. Hosted MCP
+    hosted_snippet = (
+        "# Hosted MCP Execution Status: Not Available (stdio Transport Only)\n"
+        "# \n"
+        "# This generated server is built for local stdio transport.\n"
+        "# Remote SSE / HTTP streaming transport is currently not deployed on this instance.\n"
+        "# To connect remotely, run the server locally or in a container with an SSE bridge."
+    )
+
+    hosted = IntegrationConfigItem(
+        id="hosted",
+        name="Hosted MCP",
+        transport="http",
+        format="text",
+        target_file=None,
+        snippet=hosted_snippet,
+        prerequisites=[
+            "Remote MCP streaming gateway (SSE/HTTP bridge)",
+        ],
+        setup_steps=[
+            "Generated servers in this version use local stdio transport.",
+            "If remote hosting is needed, deploy the server container with an MCP SSE proxy.",
+        ],
+        environment_variables=common_env_vars,
+        is_available=False,
+        notes="Hosted remote MCP execution is not currently deployed. Generated servers use local stdio transport.",
+    )
+
+    return IntegrationsResponse(
+        generation_id=generation_id,
+        package_name=pkg_name,
+        server_path=raw_script_path,
+        base_url=base_url,
+        read_only=read_only,
+        available_transports=["stdio"],
+        integrations=[claude_desktop, claude_code, cursor, vscode, stdio, docker, hosted],
+    )
+
+
+@router.post(
+    "/servers/{generation_id}/test-connection",
+    response_model=ConnectionTestResponse,
+    summary="Test generated MCP server connection and tool discovery",
+    description="Safely launches the generated server process over stdio, initializes MCP session, discovers tools, and terminates cleanly.",
+)
+async def test_server_connection(
+    generation_id: str = Path(..., description="UUID identifier of the generation run"),
+) -> ConnectionTestResponse:
+    """Test connection and tool discovery for a generated MCP server over stdio."""
+    try:
+        storage_service.validate_generation_id(generation_id)
+    except ValueError as err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
+
+    metadata = storage_service.get_metadata(generation_id)
+    if not metadata:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Generation run '{generation_id}' not found or expired.",
+        )
+
+    package_name = metadata.get("package_name", "server")
+    gen_dir = storage_service.get_generation_dir(generation_id)
+    if not gen_dir:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Generation directory for '{generation_id}' not found.",
+        )
+
+    server_script = (gen_dir / package_name / "server.py").resolve()
+    if not server_script.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Generated server script '{server_script.name}' not found.",
+        )
+
+    tested_at = datetime.now(timezone.utc).isoformat()
+    client = MCPClient(
+        server_script=str(server_script),
+        command=sys.executable,
+        args=[str(server_script)],
+        timeout=15.0,
+    )
+
+    try:
+        await client.connect()
+        discovered = await client.list_tools()
+        tool_names = [t.name for t in discovered]
+
+        # Log sanitized tool verification event
+        global_audit_logger.record(
+            tool_name="mcp_connection_test",
+            method="MCP_INIT",
+            path=f"/servers/{generation_id}/test-connection",
+            policy_decision="ALLOW",
+            execution_status="EXECUTED",
+            is_mutating=False,
+            arguments={"server_name": package_name, "transport": "stdio", "tool_count": len(tool_names)},
+            reason=f"Tested stdio MCP connection and discovered {len(tool_names)} tools.",
+            status_code=200,
+        )
+
+        return ConnectionTestResponse(
+            success=True,
+            generation_id=generation_id,
+            package_name=package_name,
+            transport="stdio",
+            tool_count=len(tool_names),
+            discovered_tools=tool_names,
+            tested_at=tested_at,
+            message=f"Successfully initialized MCP stdio session and discovered {len(tool_names)} tools.",
+            error=None,
+        )
+    except Exception as err:
+        raw_error = str(err)
+        sanitized_error, _ = global_redactor.redact_text(raw_error)
+
+        global_audit_logger.record(
+            tool_name="mcp_connection_test",
+            method="MCP_INIT",
+            path=f"/servers/{generation_id}/test-connection",
+            policy_decision="ALLOW",
+            execution_status="FAILED",
+            is_mutating=False,
+            arguments={"server_name": package_name, "transport": "stdio", "error": sanitized_error},
+            reason=f"MCP connection test failed: {sanitized_error}",
+            status_code=500,
+        )
+
+        return ConnectionTestResponse(
+            success=False,
+            generation_id=generation_id,
+            package_name=package_name,
+            transport="stdio",
+            tool_count=0,
+            discovered_tools=[],
+            tested_at=tested_at,
+            message="Failed to establish MCP connection or discover tools.",
+            error=sanitized_error,
+        )
+    finally:
+        await client.close()
+
+
+@router.get(
+    "/servers/{generation_id}/integrations",
+    response_model=IntegrationsResponse,
+    summary="Get integration configurations for supported MCP clients",
+    description="Returns copyable configurations and setup instructions for Claude Code, Claude Desktop, Cursor, VS Code, stdio, and Docker.",
+)
+async def get_server_integrations(
+    generation_id: str = Path(..., description="UUID identifier of the generation run"),
+) -> IntegrationsResponse:
+    """Retrieve integration configurations for a generated server."""
+    try:
+        storage_service.validate_generation_id(generation_id)
+    except ValueError as err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
+
+    metadata = storage_service.get_metadata(generation_id)
+    if not metadata:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Generation run '{generation_id}' not found or expired.",
+        )
+
+    package_name = metadata.get("package_name", "server")
+    gen_dir = storage_service.get_generation_dir(generation_id)
+    if not gen_dir:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Generation directory for '{generation_id}' not found.",
+        )
+
+    server_script = (gen_dir / package_name / "server.py").resolve()
+    if not server_script.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Generated server script '{server_script.name}' not found.",
+        )
+
+    return generate_client_integrations(generation_id, metadata, server_script)
+

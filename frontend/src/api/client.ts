@@ -132,13 +132,15 @@ export const api = {
 
   executeAgentTask: async (
     naturalLanguageRequest: string,
-    confirmDestructive = false
+    confirmDestructive = false,
+    approvalId?: string
   ): Promise<AgentExecuteResponse> => {
     return request('/api/v1/agent/execute', {
       method: 'POST',
       body: JSON.stringify({
         request: naturalLanguageRequest,
         confirm_destructive: confirmDestructive,
+        approval_id: approvalId,
       }),
     });
   },
@@ -149,4 +151,47 @@ export const api = {
       body: JSON.stringify({ confirm }),
     });
   },
+
+  getSecurityConfig: async (): Promise<import('./types').SecurityConfig> => {
+    return request('/api/v1/security/config');
+  },
+
+  updateSecurityConfig: async (params: Partial<import('./types').SecurityConfig>): Promise<import('./types').SecurityConfig> => {
+    return request('/api/v1/security/config', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  getApprovals: async (): Promise<import('./types').ApprovalRequestItem[]> => {
+    return request('/api/v1/security/approvals');
+  },
+
+  approveRequest: async (approvalId: string): Promise<{ success: boolean; message: string; approval_id: string }> => {
+    return request(`/api/v1/security/approvals/${approvalId}/approve`, {
+      method: 'POST',
+    });
+  },
+
+  rejectRequest: async (approvalId: string): Promise<{ success: boolean; message: string; approval_id: string }> => {
+    return request(`/api/v1/security/approvals/${approvalId}/reject`, {
+      method: 'POST',
+    });
+  },
+
+  getAuditLog: async (limit = 50): Promise<import('./types').AuditLogEntry[]> => {
+    return request(`/api/v1/security/audit?limit=${limit}`);
+  },
+
+  testServerConnection: async (generationId: string): Promise<import('./types').ConnectionTestResponse> => {
+    return request(`/api/v1/servers/${generationId}/test-connection`, {
+      method: 'POST',
+    });
+  },
+
+  getServerIntegrations: async (generationId: string): Promise<import('./types').IntegrationsResponse> => {
+    return request(`/api/v1/servers/${generationId}/integrations`);
+  },
 };
+
+

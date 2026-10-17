@@ -60,6 +60,30 @@ def create_parser() -> argparse.ArgumentParser:
         help="Refuse to overwrite an existing non-empty output directory.",
     )
     parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="Enable dry-run mode: intercept mutating operations without executing upstream HTTP requests.",
+    )
+    parser.add_argument(
+        "--require-approval",
+        action="store_true",
+        default=False,
+        help="Enable approval mode: require explicit human approval before executing mutating operations.",
+    )
+    parser.add_argument(
+        "--mask-secrets",
+        action="store_true",
+        default=True,
+        help="Enable multi-layer secret redaction for credentials, tokens, and sensitive headers (default: True).",
+    )
+    parser.add_argument(
+        "--no-mask-secrets",
+        action="store_false",
+        dest="mask_secrets",
+        help="Disable automatic secret masking (warning: increases credential exposure risk).",
+    )
+    parser.add_argument(
         "--version",
         "-v",
         action="version",
@@ -96,6 +120,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             base_url=args.base_url,
             read_only=args.read_only,
             overwrite=overwrite,
+            dry_run=args.dry_run,
+            require_approval=args.require_approval,
+            mask_secrets=args.mask_secrets,
         )
 
         mode_str = "Read-Only (GET only)" if result.read_only else "Full API"
@@ -105,6 +132,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             f"  Location: {result.output_dir}\n"
             f"  Mode: {mode_str}\n"
             f"  Base URL: {result.base_url}\n"
+            f"  Guardrails:\n"
+            f"    - Dry-Run: {'Enabled' if result.dry_run else 'Disabled'}\n"
+            f"    - Require Approval: {'Enabled' if result.require_approval else 'Disabled'}\n"
+            f"    - Secret Masking: {'Enabled' if result.mask_secrets else 'Disabled'}\n"
             f"  Tools Generated ({result.operation_count}):\n"
         )
         for name in result.tool_names:
