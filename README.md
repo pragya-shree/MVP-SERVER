@@ -42,7 +42,7 @@ flowchart TD
         FilterOps["Include Only GET Operations"]
         FullOps["Include All Supported Operations"]
         SchemaGen["JSON Schema Input Builder"]
-        Emitter["FastMCP Server Package Emitter"]
+        Emitter["FastMCP SServer Package Emitter"]
     end
 
     subgraph GeneratedPkg["4. Output Package (Artifact)"]
