@@ -245,7 +245,7 @@ python scripts/demo_evolution.py
 ```
 
 ### F. Run the Full Automated Test Suite
-Executes all 153 automated tests:
+Executes all 106 automated tests:
 ```powershell
 pytest -v
 ```
