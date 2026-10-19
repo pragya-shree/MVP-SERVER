@@ -20,6 +20,22 @@ Equip Claude Desktop, Cursor, and LLM agents with verifiable tool invocations, t
 
 ---
 
+## 📸 Screenshots
+
+### 🏠 Home Page
+![Home Page](screenshots/home_page.png)
+
+### ⚙️ MCP Server Generator
+![MCP Server](screenshots/mcp_server.png)
+
+### 📜 History
+![History](screenshots/history.png)
+
+### ✨ Premium Features
+![Premium](screenshots/premium.png)
+
+---
+
 ## 2. Architecture Diagram
 
 ```mermaid
@@ -123,6 +139,7 @@ D:\MVP\
 │   │   ├── components/      # Navbar, Footer, and shared UI components
 │   │   └── views/           # LandingPage, GeneratorWorkspace, AgentPlayground
 │   └── package.json         # Frontend dependencies and build scripts
+├── screenshots/             # Application UI screenshots and previews
 └── scripts/                 # Utility demonstration scripts
     ├── demo_evolution.py    # Automated specification evolution demo
     └── generate_demo_server.py # Quick script to generate demo MCP server
