@@ -208,20 +208,6 @@ cp frontend/.env.example frontend/.env
 
 ---
 
-## 📸 Screenshots
-
-### 🏠 Home Page
-![Home Page](screenshots/home_page.png)
-
-### ⚙️ MCP Server Generator
-![MCP Server](screenshots/mcp_server.png)
-
-### 📜 History
-![History](screenshots/history.png)
-
-### ✨ Premium Features
-![Premium](screenshots/premium.png)
-
 ## 6. Commands to Run
 
 ### A. Run Generator API & Backend
